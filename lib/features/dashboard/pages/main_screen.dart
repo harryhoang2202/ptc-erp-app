@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:ptc_erp_app/data/services/file_download_service.dart';
@@ -6,6 +7,7 @@ import 'package:ptc_erp_app/di/di.dart';
 import 'package:ptc_erp_app/features/dashboard/view_models/main_view_model.dart';
 import 'package:ptc_erp_app/features/document/pages/document_preview_screen.dart';
 import 'package:ptc_erp_app/shared/helpers/network_helper.dart';
+import 'package:ptc_erp_app/shared/helpers/notification_helper.dart';
 import 'package:ptc_erp_app/shared/helpers/url_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,18 +32,24 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   DateTime? timeLastPaused;
   bool _isLoading = true;
-
+  String? initialUrl;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-      await _viewModel.initialize();
-      if (widget.initialUrl != null) {
-        await _viewModel.webViewController?.loadUrl(
-          urlRequest: URLRequest(url: WebUri(widget.initialUrl!)),
-        );
+
+    FirebaseMessaging.instance.getInitialMessage().then((message) async {
+      if (message != null) {
+        if (message.data['open_url'] == "true") {
+          if (message.data['url'] != null && message.data['url']!.isNotEmpty) {
+            initialUrl = message.data['url']!;
+          }
+        }
+        await NotificationHelper.saveNotificationToDatabase(message);
+      } else {
+        initialUrl = widget.initialUrl;
       }
+      await _viewModel.initialize(initialUrl);
     });
   }
 
@@ -93,6 +101,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       await _viewModel.handleAuthRedirect(url);
       return true;
     }
+    // Update home url
+    _viewModel.homeUrl = "https://${Uri.parse(url).host}/Home";
     return false;
   }
 
@@ -145,7 +155,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// Build the InAppWebView
   Widget _buildWebView() {
     return InAppWebView(
-      initialUrlRequest: URLRequest(url: WebUri(_viewModel.homeUrl)),
       initialSettings: WebViewConfig.defaultSettings,
       onWebViewCreated: (controller) {
         _viewModel.webViewController = controller;

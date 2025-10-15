@@ -30,21 +30,27 @@ class MainViewModel with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize(String? initialUrl) async {
     isLoading = true;
     notifyListeners();
     currentUser = await StorageService.getUserCredentials();
     if (currentUser == null) {
-      await Future.delayed(Duration(milliseconds: 500), () {
-        isLoading = false;
-        notifyListeners();
-      });
-      return;
+      isLoading = false;
+      notifyListeners();
+      await signOut();
     } else {
       erpUrl = currentUser!.erpUrl;
       homeUrl = 'https://$erpUrl/Home';
       notifyListeners();
-      await signIn();
+      if (currentUser != null && !currentUser!.isLoggedIn) {
+        await signIn();
+      }
+      await Future.delayed(Duration(milliseconds: 200), () async {
+        await _webViewController?.loadUrl(
+          urlRequest: URLRequest(url: WebUri(initialUrl ?? homeUrl)),
+        );
+      });
+
       notifyListeners();
     }
   }
